@@ -1,15 +1,21 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
+const dns = require('dns');
 const ndns = require('native-dns');
 const async = require('async');
 const server = ndns.createServer();
 
-const proxyup = {address: '8.8.8.8', port: 53, type: 'udp'};
 const entries = getTheJson(process.cwd() + '/records.json') || [];
+const my_ips = getMyIpAddresses();
+const servers = dns.getServers().filter(x => !my_ips.includes(x));
 
 const is_log_local = true;
 const is_log_proxy = true;
+const default_ttl = 300;
+
+dns.setServers(servers);
 
 function handler(request, response) {
     const client = request.address.address;
@@ -34,7 +40,7 @@ function handler(request, response) {
             }
 
             record.name = record.name || question.name;
-            record.ttl = record.ttl || 300;
+            record.ttl = record.ttl || default_ttl;
 
             if (record.type === 'CNAME') {
                 record.data = record.address;
@@ -62,26 +68,24 @@ function search(domain) {
 }
 
 function proxy(client, question, response, cb) {
-    const request = ndns.Request({
-        question: question, // forwarding the question
-        server: proxyup,    // this is the DNS server we are asking
-        timeout: 1000       // wait for 1 second
-    });
+    const type = ndns.consts.QTYPE_TO_NAME[question.type];
 
-    request.on('timeout', function () {
-        is_log_proxy && logAnswer(client, 'proxy', question, 'timeout');
-    });
+    dns.resolve(question.name, type, function (err, records) {
+        records || is_log_proxy && logAnswer(client, 'proxy', question, 'unknown');
 
-    // when we get answers, append them to the response
-    request.on('message', (err, msg) => {
-        msg.answer.forEach(answer => {
+        (records || []).forEach(record => {
+            const answer = ndns[type]({
+                name: question.name,
+                address: record,
+                ttl: default_ttl
+            });
+
             response.answer.push(answer);
             is_log_proxy && logAnswer(client, 'proxy', question, answer);
         });
-    });
 
-    request.on('end', cb);
-    request.send();
+        cb();
+    });
 }
 
 function logAnswer(client, prefix, question, answer) {
@@ -104,6 +108,8 @@ function getTheJson(name) {
 }
 
 function lpad(str, pad, len) {
+    str = str || '';
+
     while (str.length < len) {
         str = pad + str;
     }
@@ -117,6 +123,19 @@ function rpad(str, pad, len) {
     return str;
 }
 
+function getMyIpAddresses() {
+    const ips = [];
+    const ifaces = os.networkInterfaces();
+
+    Object.keys(ifaces).forEach(function (ifname) {
+        ifaces[ifname].forEach(function (iface) {
+            ips.push(iface.address);
+        });
+    });
+
+    return ips;
+}
+
 server.on('request', handler);
 server.on('close', () => console.log('server closed', server.address()));
 server.on('error', (err, buff, req, res) => console.error(err.stack));
@@ -125,10 +144,11 @@ server.on('listening', () => {
     const name = 'Dev DNS Server';
     const version = '0.0.1';
     const address = server.address();
-    const listen = address.address + ':' + address.port;
+    const port = address.port;
+    const listen = address.address + ':' + port;
 
     console.log(`${name} ${version}`);
-    console.log(`listen on ${listen}`);
+    my_ips.forEach(ip => console.log(`listen on ${ip}:${port}`));
     console.log(`--------------------`);
 });
 
