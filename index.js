@@ -8,6 +8,9 @@ const server = ndns.createServer();
 const proxyup = {address: '8.8.8.8', port: 53, type: 'udp'};
 const entries = getTheJson(process.cwd() + '/records.json') || [];
 
+const is_log_local = true;
+const is_log_proxy = true;
+
 function handler(request, response) {
     const client = request.address.address;
     const questions = [].concat(request.question);
@@ -26,19 +29,21 @@ function handler(request, response) {
         while (records.length > 0) {
             const record = records.shift();
 
-            record.name = question.name;
+            if (record.type === 'CNAME') {
+                questions.push({type: ndns.consts.NAME_TO_QTYPE.A, name: record.address, class: 1});
+            }
+
+            record.name = record.name || question.name;
             record.ttl = record.ttl || 300;
 
             if (record.type === 'CNAME') {
                 record.data = record.address;
-                questions.push({type: ndns.consts.NAME_TO_QTYPE.A, name: record.data, class: 1});
             }
 
             const answer = ndns[record.type](record);
 
             response.answer.push(answer);
-
-            logAnswer(client, 'found', question, answer);
+            is_log_local && logAnswer(client, 'local', question, answer);
         }
     }
 
@@ -64,14 +69,14 @@ function proxy(client, question, response, cb) {
     });
 
     request.on('timeout', function () {
-        logAnswer(client, 'proxy', question, 'timeout');
+        is_log_proxy && logAnswer(client, 'proxy', question, 'timeout');
     });
 
     // when we get answers, append them to the response
     request.on('message', (err, msg) => {
         msg.answer.forEach(answer => {
             response.answer.push(answer);
-            logAnswer(client, 'proxy', question, answer);
+            is_log_proxy && logAnswer(client, 'proxy', question, answer);
         });
     });
 
@@ -81,12 +86,11 @@ function proxy(client, question, response, cb) {
 
 function logAnswer(client, prefix, question, answer) {
     console.log(
+        '[' + (new Date()).toISOString().substring(0, 19).replace('T', ' ') + ']',
         client,
-        prefix,
-        rpad(question.name, ' ', 48),
-        '',
         lpad(answer.type ? ndns.consts.QTYPE_TO_NAME[answer.type] : null, ' ', 5),
-        '',
+        question.name,
+        '=>',
         answer.address || answer.data || answer
     );
 }
