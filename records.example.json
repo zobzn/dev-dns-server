@@ -1,0 +1,22 @@
+[
+  {
+    "regexp": "^(?:[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?\\.)*local$",
+    "records": [
+      {
+        "type": "A",
+        "ttl": 300,
+        "address": "127.0.0.1"
+      }
+    ]
+  },
+  {
+    "regexp": "^(?:[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?\\.)*other$",
+    "records": [
+      {
+        "type": "CNAME",
+        "ttl": 300,
+        "address": "localhost"
+      }
+    ]
+  }
+]
