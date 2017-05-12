@@ -25,31 +25,34 @@ function handler(request, response) {
     while (questions.length > 0) {
         const question = questions.shift();
         const records = search(question.name);
+        const type = ndns.consts.QTYPE_TO_NAME[question.type];
 
-        // not found => forward
-        if (!records.length) {
-            defers.push(cb => proxy(client, question, response, cb));
-        }
-
-        // found local
-        while (records.length > 0) {
-            const record = records.shift();
-
-            if (record.type === 'CNAME') {
-                questions.push({type: ndns.consts.NAME_TO_QTYPE.A, name: record.address, class: 1});
+        if (['A', 'AAAA', 'CNAME'].includes(type)) {
+            // not found => forward
+            if (!records.length) {
+                defers.push(cb => proxy(client, question, response, cb));
             }
 
-            record.name = record.name || question.name;
-            record.ttl = record.ttl || default_ttl;
+            // found local
+            while (records.length > 0) {
+                const record = records.shift();
 
-            if (record.type === 'CNAME') {
-                record.data = record.address;
+                if (record.type === 'CNAME') {
+                    questions.push({type: ndns.consts.NAME_TO_QTYPE.A, name: record.address, class: 1});
+                }
+
+                record.name = record.name || question.name;
+                record.ttl = record.ttl || default_ttl;
+
+                if (record.type === 'CNAME') {
+                    record.data = record.address;
+                }
+
+                const answer = ndns[record.type](record);
+
+                response.answer.push(answer);
+                is_log_local && logAnswer(client, 'local', question, answer);
             }
-
-            const answer = ndns[record.type](record);
-
-            response.answer.push(answer);
-            is_log_local && logAnswer(client, 'local', question, answer);
         }
     }
 
@@ -70,10 +73,11 @@ function search(domain) {
 function proxy(client, question, response, cb) {
     const type = ndns.consts.QTYPE_TO_NAME[question.type];
 
-    dns.resolve(question.name, type, function (err, records) {
-        records || is_log_proxy && logAnswer(client, 'proxy', question, 'unknown');
+    dns.resolve(question.name, type, function (err, items) {
+        const records = [...new Set(items || [])];
 
-        (records || []).forEach(record => {
+        records || is_log_proxy && logAnswer(client, 'proxy', question, 'unknown');
+        records.forEach(record => {
             const answer = ndns[type]({
                 name: question.name,
                 address: record,
