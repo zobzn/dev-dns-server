@@ -4,10 +4,14 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js"
+    "start": "pm2 start index.js --no-daemon --watch --merge-logs"
   },
   "dependencies": {
-    "async": "^2.4.0",
-    "native-dns": "^0.7.0"
+    "async": "^2.6.3",
+    "native-dns": "^0.7.0",
+    "winston": "^3.2.1"
+  },
+  "devDependencies": {
+    "pm2": "^3.5.1"
   }
 }
