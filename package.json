@@ -7,7 +7,7 @@
     "start": "pm2 start index.js --no-daemon --watch --merge-logs"
   },
   "dependencies": {
-    "async": "^2.6.3",
+    "async": "^2.6.4",
     "native-dns": "^0.7.0",
     "winston": "^3.2.1"
   },
